@@ -1,0 +1,91 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+cookies.txt
+*.cookies.txt
+*.token
+*.secret
+
+# Browser profiles / login sessions
+pw_profile/
+app/pw_profile/
+**/BrowserMetrics/
+**/Cache/
+**/Code Cache/
+**/GPUCache/
+**/GrShaderCache/
+**/ShaderCache/
+**/Session Storage/
+**/Local Storage/
+**/IndexedDB/
+**/Service Worker/
+**/Sessions/
+**/Snapshots/
+
+# Runtime state and databases
+data/
+*.db
+*.sqlite
+*.sqlite3
+metadata.json
+download_state.json
+*.tmp
+*.part
+
+# Logs
+logs/
+*.log
+
+# Downloaded/generated media and transcripts
+downloads/
+output/
+test_output_audio/
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+*.m4v
+*.mp3
+*.wav
+*.m4a
+*.aac
+*.flac
+*.srt
+*.vtt
+*.ass
+*.transcript.json
+*.transcript.srt
+*.vi.transcript.json
+*.vi.transcript.srt
+
+# Build artifacts
+build/
+dist/
+*.spec
+*.manifest
+*.exe
+*.dll
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

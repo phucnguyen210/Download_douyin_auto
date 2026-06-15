@@ -1,0 +1,9 @@
+aiohttp>=3.9.5
+openai>=1.58.0
+python-dotenv>=1.0.1
+rich>=13.7.1
+requests>=2.32.3
+tenacity>=9.0.0
+yt-dlp>=2025.1.15
+gTTS>=2.5.1
+edge-tts>=6.1.12

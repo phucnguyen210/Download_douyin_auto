@@ -175,3 +175,29 @@ Dry-run conversion list:
 ```powershell
 python tools\convert_hevc_finals_to_h264.py --dry-run
 ```
+## Generate Facebook Titles from SRT
+
+After the Vietnamese subtitle is created, the GUI pipeline calls OpenAI to generate a Facebook-ready title from the SRT content and saves it to SQLite:
+
+```text
+data/app.db -> videos.title
+```
+
+That title is used later by `DownVidFB` when syncing Douyin final videos into the Facebook publishing database.
+
+Useful environment variables:
+
+```env
+OPENAI_TITLE_MODEL=gpt-4.1-mini
+TITLE_FROM_SRT_MAX_CHARS=8000
+TITLE_MAX_CHARS=100
+```
+
+Generate titles for old completed videos without re-rendering:
+
+```powershell
+python tools\generate_titles_from_srt.py --dry-run --limit 10
+python tools\generate_titles_from_srt.py --limit 10
+```
+
+Use `--overwrite` if you want to regenerate titles that were already saved.

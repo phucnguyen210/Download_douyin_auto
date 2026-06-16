@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import asyncio
@@ -17,7 +17,6 @@ from app.database.db import Database
 from app.database.repositories import VideoRepository
 from app.douyin import DouyinDownloader, VideoMeta
 from app.logger import setup_logger
-from app.sorter import sort_old_to_new
 from app.translator import Translator
 from app.utils import (
     atomic_write_json,
@@ -95,11 +94,11 @@ async def process_one(
         existing_record = repository.get_video_by_url(video.video_url)
 
     if existing_record and existing_record.get("download_status") == "completed":
-        logger.info(f"[dim]Bỏ qua[/dim] {video.aweme_id} vì đã tải trước đó")
+        logger.info(f"[dim]Bá» qua[/dim] {video.aweme_id} vÃ¬ Ä‘Ã£ táº£i trÆ°á»›c Ä‘Ã³")
         return
 
     logger.info(
-        f"Xử lý #{idx:04d} | aweme_id={video.aweme_id} | create_time={video.create_time} | title={video.title}"
+        f"Xá»­ lÃ½ #{idx:04d} | aweme_id={video.aweme_id} | create_time={video.create_time} | title={video.title}"
     )
 
     video_data = {
@@ -122,7 +121,7 @@ async def process_one(
 
     try:
         translated = await translator.translate(video.title)
-        logger.info(f"[green]Đã dịch[/green] {video.aweme_id}: {translated.translated_title}")
+        logger.info(f"[green]ÄÃ£ dá»‹ch[/green] {video.aweme_id}: {translated.translated_title}")
 
         run_date = datetime.now().strftime("%Y-%m-%d")
         batch_no = (idx - 1) // 10 + 1
@@ -155,10 +154,10 @@ async def process_one(
             target_path=final_path,
             checksum=checksum,
         )
-        logger.info(f"[bold green]Hoàn tất[/bold green] -> {final_path}")
+        logger.info(f"[bold green]HoÃ n táº¥t[/bold green] -> {final_path}")
 
     except Exception as exc:
-        logger.exception(f"Lỗi download {video.aweme_id}: {type(exc).__name__}: {exc}")
+        logger.exception(f"Lá»—i download {video.aweme_id}: {type(exc).__name__}: {exc}")
         repository.update_video(video_id, {
             "download_status": "failed",
             "error_message": str(exc),
@@ -190,15 +189,17 @@ async def amain(argv: Optional[list[str]] = None) -> int:
     translator = Translator(settings, logger=logger)
 
     if not settings.openai_api_key:
-        logger.error("Thiếu OPENAI_API_KEY trong .env")
+        logger.error("Thiáº¿u OPENAI_API_KEY trong .env")
         return 2
 
     videos = await downloader.crawl_profile(args.profile_url,args.target_month)
-    videos = sort_old_to_new([v.to_dict() for v in videos])
+    # crawl_profile already returns profile order reversed to old -> new. Do not sort by create_time here,
+    # because Douyin profile crawl may not expose the real publish timestamp for each card.
+    videos = [v.to_dict() for v in videos]
     if args.limit and args.limit > 0:
         videos = videos[: args.limit]
 
-    logger.info(f"Bắt đầu xử lý {len(videos)} video, old -> new")
+    logger.info(f"Báº¯t Ä‘áº§u xá»­ lÃ½ {len(videos)} video, old -> new")
     state.state["profile_url"] = args.profile_url
     state.state["order"] = [v.get("aweme_id") for v in videos]
     state._flush()
@@ -226,14 +227,16 @@ async def amain(argv: Optional[list[str]] = None) -> int:
                 args.target_month,
             )
         except Exception as exc:
-            logger.exception(f"Lỗi với {video.aweme_id}: {type(exc).__name__}: {exc}")
+            logger.exception(f"Lá»—i vá»›i {video.aweme_id}: {type(exc).__name__}: {exc}")
             continue
 
     logger.info(
-        f"Xong. Đã hoàn tất {state.completed_count()}/{len(videos)} video"
+        f"Xong. ÄÃ£ hoÃ n táº¥t {state.completed_count()}/{len(videos)} video"
     )
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(amain()))
+
+

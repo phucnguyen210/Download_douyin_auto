@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import threading
 import asyncio
@@ -19,6 +19,7 @@ from app.services.tts_service import TTSService, TTS_VOICE_OPTIONS, DEFAULT_TTS_
 from app.services.audio_merge_service import AudioMergeService
 from app.services.video_merge_service import VideoMergeService
 from app.services.subtitle_service import SubtitleService
+from app.services.title_service import TitleGeneratorService
 from app.config import Settings
 from app.database.db import Database
 from app.database.repositories import VideoRepository
@@ -29,124 +30,164 @@ LOGGER = setup_logger("gui")
 class AppGUI:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Douyin Downloader — Pipeline GUI")
+        self.root.title("Douyin Pipeline Studio")
+        self.root.geometry("1240x820")
+        self.root.minsize(1040, 720)
         self.settings = load_settings()
         self.cwd = Path(os.getcwd())
+        self._selected_files = set()
 
-        frm = tk.Frame(root)
-        frm.pack(padx=8, pady=8)
+        self._setup_style()
 
-        form_frame = tk.Frame(frm)
-        form_frame.pack(fill=tk.X, pady=(0, 8))
+        shell = ttk.Frame(root, style="App.TFrame", padding=16)
+        shell.pack(fill=tk.BOTH, expand=True)
+        shell.columnconfigure(0, weight=1)
+        shell.rowconfigure(2, weight=1)
 
-        tk.Label(form_frame, text="URL Profile:").grid(row=0, column=0, sticky=tk.W, padx=4, pady=2)
+        header = ttk.Frame(shell, style="Header.TFrame", padding=(18, 14))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        header.columnconfigure(0, weight=1)
+        ttk.Label(header, text="Douyin Pipeline Studio", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="Tải video, dịch phụ đề, tạo TTS và xuất bản final video", style="Subtitle.TLabel").grid(row=1, column=0, sticky="w", pady=(3, 0))
+        ttk.Button(header, text="Mở thư mục output", command=self._open_output, style="Ghost.TButton").grid(row=0, column=1, rowspan=2, sticky="e")
+
+        controls = ttk.Frame(shell, style="Panel.TFrame", padding=14)
+        controls.grid(row=1, column=0, sticky="ew", pady=(0, 12))
+        for col in range(8):
+            controls.columnconfigure(col, weight=1 if col in (1, 3, 5) else 0)
+
+        ttk.Label(controls, text="URL Profile", style="Field.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
         self.profile_var = tk.StringVar()
-        tk.Entry(form_frame, textvariable=self.profile_var, width=60).grid(row=0, column=1, padx=4, pady=2)
+        ttk.Entry(controls, textvariable=self.profile_var, width=58).grid(row=0, column=1, columnspan=5, sticky="ew", pady=4)
 
-        tk.Label(form_frame, text="Tháng mục tiêu (YYYY-MM):").grid(row=1, column=0, sticky=tk.W, padx=4, pady=2)
+        ttk.Label(controls, text="Tháng mục tiêu", style="Field.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
         self.month_var = tk.StringVar()
-        tk.Entry(form_frame, textvariable=self.month_var, width=20).grid(row=1, column=1, sticky=tk.W, padx=4, pady=2)
+        ttk.Entry(controls, textvariable=self.month_var, width=14).grid(row=1, column=1, sticky="w", pady=4)
+        ttk.Label(controls, text="YYYY-MM", style="Hint.TLabel").grid(row=1, column=2, sticky="w", padx=(6, 18), pady=4)
 
-        tk.Label(form_frame, text="Giới hạn:").grid(row=2, column=0, sticky=tk.W, padx=4, pady=2)
+        ttk.Label(controls, text="Giới hạn", style="Field.TLabel").grid(row=1, column=3, sticky="w", padx=(0, 8), pady=4)
         self.limit_var = tk.StringVar(value="0")
-        tk.Entry(form_frame, textvariable=self.limit_var, width=10).grid(row=2, column=1, sticky=tk.W, padx=4, pady=2)
+        ttk.Entry(controls, textvariable=self.limit_var, width=9).grid(row=1, column=4, sticky="w", pady=4)
 
-        tk.Label(form_frame, text="Kieu dich:").grid(row=3, column=0, sticky=tk.W, padx=4, pady=2)
+        ttk.Label(controls, text="Kiểu dịch", style="Field.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
         self.translation_style_options = {label: key for key, label in TRANSLATION_STYLE_LABELS.items()}
         self.translation_style_var = tk.StringVar(value=TRANSLATION_STYLE_LABELS["general"])
-        style_combo = ttk.Combobox(
-            form_frame,
+        ttk.Combobox(
+            controls,
             textvariable=self.translation_style_var,
             values=list(self.translation_style_options.keys()),
             state="readonly",
             width=24,
-        )
-        style_combo.grid(row=3, column=1, sticky=tk.W, padx=4, pady=2)
+        ).grid(row=2, column=1, sticky="w", pady=4)
 
-
-        tk.Label(form_frame, text="Giong doc:").grid(row=4, column=0, sticky=tk.W, padx=4, pady=2)
+        ttk.Label(controls, text="Giọng đọc", style="Field.TLabel").grid(row=2, column=3, sticky="w", padx=(0, 8), pady=4)
         self.tts_voice_var = tk.StringVar(value=os.getenv("TTS_VOICE_LABEL", DEFAULT_TTS_VOICE_LABEL))
         if self.tts_voice_var.get() not in TTS_VOICE_OPTIONS:
             self.tts_voice_var.set(DEFAULT_TTS_VOICE_LABEL)
-        voice_combo = ttk.Combobox(
-            form_frame,
+        ttk.Combobox(
+            controls,
             textvariable=self.tts_voice_var,
             values=list(TTS_VOICE_OPTIONS.keys()),
             state="readonly",
             width=32,
-        )
-        voice_combo.grid(row=4, column=1, sticky=tk.W, padx=4, pady=2)
+        ).grid(row=2, column=4, columnspan=2, sticky="w", pady=4)
 
-        btn_frame = tk.Frame(frm)
-        btn_frame.pack(side=tk.TOP, fill=tk.X)
+        actions = ttk.Frame(controls, style="Panel.TFrame")
+        actions.grid(row=0, column=6, rowspan=3, sticky="nse", padx=(18, 0))
+        ttk.Button(actions, text="Tải video", command=self._run_download, style="Primary.TButton").pack(fill=tk.X, pady=(0, 8))
+        ttk.Button(actions, text="Làm mới", command=self.refresh_file_list, style="Ghost.TButton").pack(fill=tk.X)
 
-        download_btn = tk.Button(btn_frame, text="Tải video", width=12, command=self._run_download)
-        download_btn.grid(row=0, column=0, padx=4)
+        body = ttk.PanedWindow(shell, orient=tk.VERTICAL)
+        body.grid(row=2, column=0, sticky="nsew")
 
-        open_out = tk.Button(btn_frame, text="Mở thư mục", width=12, command=self._open_output)
-        open_out.grid(row=0, column=1, padx=4)
+        top_panel = ttk.Frame(body, style="App.TFrame")
+        top_panel.columnconfigure(0, weight=1)
+        top_panel.columnconfigure(1, weight=1)
+        top_panel.rowconfigure(0, weight=1)
+        body.add(top_panel, weight=4)
 
-        refresh_btn = tk.Button(btn_frame, text="Làm mới", width=12, command=self.refresh_file_list)
-        refresh_btn.grid(row=0, column=2, padx=4)
-
-        # Video list
-        list_frame = tk.Frame(frm)
-        list_frame.pack(fill=tk.BOTH, expand=True)
-
-        file_frame = tk.LabelFrame(list_frame, text="Video tải về")
-        file_frame.pack(fill=tk.BOTH, expand=True)
+        file_frame = ttk.LabelFrame(top_panel, text="Video tải về", padding=10)
+        file_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        file_frame.columnconfigure(0, weight=1)
+        file_frame.rowconfigure(0, weight=1)
 
         file_cols = ("sel", "name", "path")
-        self.file_tree = ttk.Treeview(file_frame, columns=file_cols, show="headings", height=8)
+        self.file_tree = ttk.Treeview(file_frame, columns=file_cols, show="headings", height=10, style="Modern.Treeview")
         self.file_tree.heading("sel", text="Chọn")
         self.file_tree.heading("name", text="Tiêu đề")
         self.file_tree.heading("path", text="Đường dẫn")
-        self.file_tree.column("sel", width=40, anchor=tk.CENTER)
-        self.file_tree.column("name", width=300)
-        self.file_tree.column("path", width=500)
-        self.file_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        file_scroll = tk.Scrollbar(file_frame, orient="vertical", command=self.file_tree.yview)
-        file_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.file_tree.column("sel", width=58, anchor=tk.CENTER, stretch=False)
+        self.file_tree.column("name", width=360)
+        self.file_tree.column("path", width=560)
+        self.file_tree.grid(row=0, column=0, sticky="nsew")
+        file_scroll = ttk.Scrollbar(file_frame, orient="vertical", command=self.file_tree.yview)
+        file_scroll.grid(row=0, column=1, sticky="ns")
         self.file_tree.configure(yscrollcommand=file_scroll.set)
         self.file_tree.bind("<Double-1>", self._on_file_tree_toggle)
 
-        db_frame = tk.LabelFrame(list_frame, text="Cơ sở dữ liệu video")
-        db_frame.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
+        db_frame = ttk.LabelFrame(top_panel, text="Cơ sở dữ liệu video", padding=10)
+        db_frame.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        db_frame.columnconfigure(0, weight=1)
+        db_frame.rowconfigure(0, weight=1)
 
         db_cols = ("status", "title", "path")
-        self.db_tree = ttk.Treeview(db_frame, columns=db_cols, show="headings", height=8)
+        self.db_tree = ttk.Treeview(db_frame, columns=db_cols, show="headings", height=10, style="Modern.Treeview")
         self.db_tree.heading("status", text="Trạng thái")
         self.db_tree.heading("title", text="Tiêu đề")
         self.db_tree.heading("path", text="Đường dẫn / Video")
-        self.db_tree.column("status", width=120, anchor=tk.CENTER)
-        self.db_tree.column("title", width=300)
-        self.db_tree.column("path", width=500)
-        self.db_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        db_scroll = tk.Scrollbar(db_frame, orient="vertical", command=self.db_tree.yview)
-        db_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.db_tree.column("status", width=110, anchor=tk.CENTER, stretch=False)
+        self.db_tree.column("title", width=360)
+        self.db_tree.column("path", width=560)
+        self.db_tree.grid(row=0, column=0, sticky="nsew")
+        db_scroll = ttk.Scrollbar(db_frame, orient="vertical", command=self.db_tree.yview)
+        db_scroll.grid(row=0, column=1, sticky="ns")
         self.db_tree.configure(yscrollcommand=db_scroll.set)
 
-        # Action buttons for selected
-        action_frame = tk.Frame(frm)
-        action_frame.pack(fill=tk.X, pady=(6, 8))
+        bottom_panel = ttk.Frame(body, style="Panel.TFrame", padding=12)
+        bottom_panel.columnconfigure(0, weight=1)
+        bottom_panel.rowconfigure(1, weight=1)
+        body.add(bottom_panel, weight=2)
 
-        tk.Button(action_frame, text="ASR", command=self._asr_selected).pack(side=tk.LEFT, padx=4)
-        tk.Button(action_frame, text="Chạy pipeline", command=self._process_selected).pack(side=tk.LEFT, padx=4)
-        tk.Button(action_frame, text="Lên lịch DB", command=self._schedule_selected).pack(side=tk.LEFT, padx=4)
-        tk.Button(action_frame, text="Làm mới DB", command=self.refresh_db_list).pack(side=tk.LEFT, padx=4)
+        action_frame = ttk.Frame(bottom_panel, style="Panel.TFrame")
+        action_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        ttk.Button(action_frame, text="ASR", command=self._asr_selected, style="Ghost.TButton").pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(action_frame, text="Chạy pipeline", command=self._process_selected, style="Primary.TButton").pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(action_frame, text="Lên lịch DB", command=self._schedule_selected, style="Ghost.TButton").pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(action_frame, text="Làm mới DB", command=self.refresh_db_list, style="Ghost.TButton").pack(side=tk.LEFT)
 
-        self.log = ScrolledText(frm, height=10, width=100)
-        self.log.pack(pady=(8, 0))
-
-        # internal state
-        self._selected_files = set()
-        self.settings: Settings = load_settings()
+        self.log = ScrolledText(bottom_panel, height=10, width=120, bg="#0f172a", fg="#e5e7eb", insertbackground="#e5e7eb", relief=tk.FLAT, padx=10, pady=8)
+        self.log.grid(row=1, column=0, sticky="nsew")
 
         self.refresh_file_list()
         self.refresh_db_list()
 
+    def _setup_style(self) -> None:
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+        self.root.configure(bg="#eef2f7")
+        base_font = ("Segoe UI", 10)
+        style.configure("App.TFrame", background="#eef2f7")
+        style.configure("Header.TFrame", background="#111827", relief="flat")
+        style.configure("Panel.TFrame", background="#ffffff", relief="flat")
+        style.configure("Title.TLabel", background="#111827", foreground="#ffffff", font=("Segoe UI Semibold", 18))
+        style.configure("Subtitle.TLabel", background="#111827", foreground="#cbd5e1", font=("Segoe UI", 10))
+        style.configure("Field.TLabel", background="#ffffff", foreground="#334155", font=("Segoe UI Semibold", 10))
+        style.configure("Hint.TLabel", background="#ffffff", foreground="#64748b", font=("Segoe UI", 9))
+        style.configure("TLabel", font=base_font)
+        style.configure("TEntry", padding=6, font=base_font)
+        style.configure("TCombobox", padding=5, font=base_font)
+        style.configure("TLabelframe", background="#ffffff", bordercolor="#d8dee9")
+        style.configure("TLabelframe.Label", background="#ffffff", foreground="#0f172a", font=("Segoe UI Semibold", 11))
+        style.configure("Primary.TButton", background="#1d4ed8", foreground="#ffffff", font=("Segoe UI Semibold", 10), padding=(14, 8), borderwidth=0)
+        style.map("Primary.TButton", background=[("active", "#1e40af"), ("pressed", "#1e3a8a")], foreground=[("disabled", "#94a3b8")])
+        style.configure("Ghost.TButton", background="#e8eef7", foreground="#0f172a", font=("Segoe UI", 10), padding=(12, 8), borderwidth=0)
+        style.map("Ghost.TButton", background=[("active", "#dbeafe"), ("pressed", "#bfdbfe")])
+        style.configure("Modern.Treeview", background="#ffffff", foreground="#0f172a", fieldbackground="#ffffff", rowheight=28, font=("Segoe UI", 9), borderwidth=0)
+        style.configure("Modern.Treeview.Heading", background="#f1f5f9", foreground="#334155", font=("Segoe UI Semibold", 9), padding=6)
+        style.map("Modern.Treeview", background=[("selected", "#bfdbfe")], foreground=[("selected", "#0f172a")])
     def _append(self, text: str) -> None:
         self.log.insert(tk.END, text + "\n")
         self.log.see(tk.END)
@@ -237,7 +278,7 @@ class AppGUI:
         for f in files[:200]:
             name = f.name
             iid = str(f)
-            sel = "☐"
+            sel = "[ ]"
             self.file_tree.insert("", tk.END, iid=iid, values=(sel, name, str(f)))
 
     def refresh_db_list(self) -> None:
@@ -268,10 +309,10 @@ class AppGUI:
             return
         if item_id in self._selected_files:
             self._selected_files.remove(item_id)
-            self.file_tree.set(item_id, "sel", "☐")
+            self.file_tree.set(item_id, "sel", "[ ]")
         else:
             self._selected_files.add(item_id)
-            self.file_tree.set(item_id, "sel", "☑")
+            self.file_tree.set(item_id, "sel", "[x]")
 
     def _extract_audio_selected(self) -> None:
         paths = self._get_selected_paths()
@@ -333,7 +374,7 @@ class AppGUI:
             ss = SubtitleService()
             translation_style = self._get_translation_style()
             translation_style_label = self._get_translation_style_label()
-            self._append(f"[PIPELINE] TTS voice: {tts_voice_label}")
+            self._append(f"[PIPELINE] TTS voice: {tts_voice_label} -> {tt.tts_provider}:{tt.tts_voice}")
 
             import asyncio
 
@@ -344,6 +385,37 @@ class AppGUI:
                     pipeline_paths = self._build_pipeline_paths(p)
                     self._append(f"[PIPELINE] Work dir: {pipeline_paths['work_dir']}")
                     self._append(f"[PIPELINE] Final dir: {pipeline_paths['final_video'].parent}")
+                    final_vid = pipeline_paths["final_video"]
+                    translated_json_cache = pipeline_paths["base"].with_suffix(".vi.transcript.json")
+                    existing_final_path = None
+                    existing_db_id = None
+                    existing_completed_by_db = False
+                    try:
+                        db = Database(Path(self.settings.database_path))
+                        repo = VideoRepository(db)
+                        existing = repo.get_video_by_source_id(p.stem) or repo.get_video_by_url(str(p))
+                        if existing:
+                            existing_db_id = existing.get("id")
+                            existing_final_path = existing.get("final_video_path") or existing.get("local_video_path")
+                            existing_completed_by_db = (
+                                existing.get("translation_status") == "completed"
+                                and existing.get("tts_status") == "completed"
+                                and existing.get("video_merge_status") == "completed"
+                            )
+                        db.close()
+                    except Exception as db_lookup_exc:
+                        self._append(f"[PIPELINE] DB lookup skipped for {p.name}: {db_lookup_exc}")
+
+                    candidate_finals = [final_vid]
+                    if existing_final_path:
+                        candidate_finals.append(Path(existing_final_path))
+                    completed_final = next((candidate for candidate in candidate_finals if candidate and Path(candidate).exists() and Path(candidate).stat().st_size > 0), None)
+                    if completed_final:
+                        self._append(f"[PIPELINE] Đã tồn tại video đã dịch/lồng tiếng, bỏ qua: {p.name} -> {completed_final}")
+                        continue
+                    if existing_db_id and translated_json_cache.exists():
+                        self._append(f"[PIPELINE] Video đã có dữ liệu dịch trong DB; chưa có final nên tiếp tục xử lý: {p.name}")
+
 
                     # 1) Extract audio
                     outdir = pipeline_paths["audio_dir"]
@@ -405,7 +477,16 @@ class AppGUI:
 
                     # 7) Subtitles
                     self._append(f"[PIPELINE] Generating subtitles")
-                    ss.create_srt_for_transcript(translated_json_path, merged_audio, pipeline_paths["final_srt"])
+                    final_srt = ss.create_srt_for_transcript(translated_json_path, merged_audio, pipeline_paths["final_srt"])
+
+                    generated_title = p.stem
+                    try:
+                        self._append("[PIPELINE] Generating Facebook title from Vietnamese SRT")
+                        title_service = TitleGeneratorService(self.settings)
+                        generated_title = title_service.generate_from_srt_file(final_srt)
+                        self._append(f"[PIPELINE] Generated title: {generated_title}")
+                    except Exception as title_exc:
+                        self._append(f"[PIPELINE] Title generation failed, using filename fallback: {title_exc}")
 
                     try:
                         db = Database(Path(self.settings.database_path))
@@ -414,7 +495,7 @@ class AppGUI:
                             "source_platform": "douyin",
                             "source_video_id": p.stem,
                             "source_video_url": str(p),
-                            "title": p.stem,
+                            "title": generated_title,
                             "local_video_path": str(p),
                             "download_status": "completed",
                             "audio_extract_status": "completed",
@@ -441,6 +522,17 @@ class AppGUI:
 
                 except Exception as e:
                     self._append(f"[PIPELINE] Thất bại {p.name}: {e}")
+                    self._append("[PIPELINE] Bỏ qua video lỗi và tiếp tục video tiếp theo.")
+                    try:
+                        db = Database(Path(self.settings.database_path))
+                        repo = VideoRepository(db)
+                        existing = repo.get_video_by_source_id(p.stem) or repo.get_video_by_url(str(p))
+                        if existing:
+                            repo.update_video(existing["id"], {"error_message": str(e)})
+                        db.close()
+                    except Exception as db_error_exc:
+                        self._append(f"[PIPELINE] Không ghi được lỗi vào DB: {db_error_exc}")
+                    continue
 
         threading.Thread(target=target, daemon=True).start()
 
@@ -485,7 +577,7 @@ class AppGUI:
         def target():
             tts_voice_label = self._get_tts_voice_label()
             tts = TTSService(self.settings, voice_label=tts_voice_label)
-            self._append(f"TTS voice: {tts_voice_label}")
+            self._append(f"TTS voice: {tts_voice_label} -> {tts.tts_provider}:{tts.tts_voice}")
             for p in paths:
                 pipeline_paths = self._build_pipeline_paths(p)
                 trans = pipeline_paths["base"].with_suffix('.vi.transcript.json')
@@ -507,11 +599,12 @@ class AppGUI:
         if not paths:
             self._append("Chưa chọn video để tạo phụ đề")
             return
-        self._append("Hãy chạy ASR trước để tạo transcript, sau đó dùng nút Chạy pipeline để tiếp tục.")
 
 
 def main() -> None:
     root = tk.Tk()
     app = AppGUI(root)
     root.mainloop()
+
+
 
